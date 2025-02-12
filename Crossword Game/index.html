@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crossword Puzzle Game</title>
+    <link rel="stylesheet" href="styles/style.css">
+</head>
+<body>
+    <div id="game-container">
+        <h1>Crossword Puzzle Game</h1>
+        <div class="game-layout">
+            <div id="crossword-board"></div>
+            <div id="clues">
+                <div class="clues-section">
+                    <h3>Across</h3>
+                    <ul id="across-clues"></ul>
+                </div>
+                <div class="clues-section">
+                    <h3>Down</h3>
+                    <ul id="down-clues"></ul>
+                </div>
+            </div>
+        </div>
+        <div id="controls">
+            <button id="check-answers">Check Answers</button>
+            <button id="get-hint">Get Hint</button>
+            <button id="reset-puzzle">Reset Puzzle</button>
+        </div>
+    </div>
+    <script src="scripts/app.js"></script>
+</body>
+</html>

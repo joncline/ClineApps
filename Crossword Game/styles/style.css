@@ -1,0 +1,200 @@
+/* Basic styling for the entire page */
+body {
+    font-family: Arial, sans-serif; /* Sets the font for the page */
+    background-color: #f4f4f9; /* Light gray background color */
+    margin: 0; /* Removes default margin */
+    padding: 0; /* Removes default padding */
+    display: flex; /* Uses flexbox for layout */
+    justify-content: center; /* Centers content horizontally */
+    align-items: center; /* Centers content vertically */
+    height: auto; /* Allow height to adjust based on content */
+    padding-top: 20px; /* Add padding to the top */
+}
+
+/* Container for the entire game */
+#game-container {
+    text-align: center; /* Centers text inside the container */
+    background-color: #fff; /* White background for the container */
+    padding: 20px; /* Adds padding inside the container */
+    border-radius: 8px; /* Rounds the corners of the container */
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Adds a subtle shadow */
+    max-width: 1200px; /* Maximum width of the game container */
+    margin: 0 auto; /* Center the container */
+}
+
+/* Game layout styling */
+.game-layout {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin: 20px 0;
+}
+
+/* Clues section styling */
+#clues {
+    flex: 1;
+    text-align: left;
+    max-width: 400px;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    max-height: 600px;
+    overflow-y: auto;
+    position: relative;
+}
+
+.clues-section {
+    margin-bottom: 20px;
+}
+
+.clues-section h3 {
+    color: #333;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+}
+
+.clues-section ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.clues-section li {
+    padding: 5px 0;
+    font-size: 14px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Help bubble styling */
+.help-bubble {
+    width: 16px;
+    height: 16px;
+    background-color: #007bff;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: help;
+    position: relative;
+    margin-left: 4px;
+}
+
+/* Tooltip styling */
+.help-bubble:hover::after {
+    content: attr(data-hint);
+    position: absolute;
+    left: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #333;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    max-width: 200px;
+    white-space: normal;
+    z-index: 9999;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    line-height: 1.4;
+    pointer-events: none;
+}
+
+/* Left-positioned tooltip for Down clues */
+.tooltip-left:hover::after {
+    left: auto;
+    right: 24px;
+}
+
+/* Arrow for the tooltip */
+.help-bubble:hover::before {
+    content: '';
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 6px solid transparent;
+    border-right-color: #333;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+/* Left-positioned arrow for Down clues */
+.tooltip-left:hover::before {
+    left: auto;
+    right: 16px;
+    border-right-color: transparent;
+    border-left-color: #333;
+}
+
+/* Crossword board container */
+#crossword-board {
+    position: relative;
+    width: 600px;
+    height: 600px;
+    margin: 0;
+    background-color: #f4f4f9;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+/* Individual cell styling */
+.cell {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background-color: white;
+    border: 1px solid #ccc;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    outline: none; /* Remove default outline */
+    cursor: text;
+}
+
+/* Focus state for cells */
+.cell:focus {
+    border: 2px solid #007bff;
+    box-shadow: 0 0 3px rgba(0, 123, 255, 0.5);
+}
+
+/* Cell number styling */
+.cell-number {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    font-size: 10px;
+    color: #666;
+    width: auto;
+    height: auto;
+    pointer-events: none;
+}
+
+/* Container for the control buttons */
+#controls {
+    margin-top: 20px; /* Adds top margin */
+}
+
+/* Styling for buttons */
+button {
+    padding: 10px 15px; /* Padding inside buttons */
+    margin: 5px; /* Margin around buttons */
+    border: none; /* Removes default border */
+    border-radius: 5px; /* Rounds the corners of buttons */
+    background-color: #007bff; /* Blue background color */
+    color: white; /* White text color */
+    cursor: pointer; /* Pointer cursor on hover */
+    transition: background-color 0.3s; /* Smooth transition for background color */
+}
+
+/* Hover effect for buttons */
+button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+}
