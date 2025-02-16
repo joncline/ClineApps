@@ -22,6 +22,38 @@ body {
     margin: 0 auto; /* Center the container */
 }
 
+/* Puzzle selector styling */
+#puzzle-selector {
+    margin: 20px 0;
+    text-align: center;
+}
+
+#puzzle-selector label {
+    margin-right: 10px;
+    font-weight: bold;
+    color: #333;
+}
+
+#puzzle-select {
+    padding: 8px 15px;
+    font-size: 16px;
+    border: 2px solid #007bff;
+    border-radius: 5px;
+    background-color: white;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+#puzzle-select:hover {
+    border-color: #0056b3;
+}
+
+#puzzle-select:focus {
+    border-color: #0056b3;
+    box-shadow: 0 0 5px rgba(0, 86, 179, 0.3);
+}
+
 /* Game layout styling */
 .game-layout {
     display: flex;

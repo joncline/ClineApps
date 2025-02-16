@@ -9,6 +9,14 @@
 <body>
     <div id="game-container">
         <h1>Crossword Puzzle Game</h1>
+        <div id="puzzle-selector">
+            <label for="puzzle-select">Select Puzzle:</label>
+            <select id="puzzle-select">
+                <option value="salesforce">Salesforce</option>
+                <option value="agentforce">AgentForce</option>
+                <option value="softskills">Soft Skills</option>
+            </select>
+        </div>
         <div class="game-layout">
             <div id="crossword-board"></div>
             <div id="clues">
@@ -28,6 +36,6 @@
             <button id="reset-puzzle">Reset Puzzle</button>
         </div>
     </div>
-    <script src="scripts/app.js"></script>
+    <script type="module" src="scripts/app.js"></script>
 </body>
 </html>
