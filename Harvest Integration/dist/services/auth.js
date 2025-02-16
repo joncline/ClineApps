@@ -14,13 +14,13 @@ export class AuthService {
         this.config = config;
     }
     async authenticate(isSource = true) {
-        const tokens = await this.loadTokens();
-        const existingTokens = isSource ? tokens.source : tokens.destination;
-        if (existingTokens) {
-            if (this.isTokenValid(existingTokens)) {
-                return existingTokens;
+        const stored = await this.loadTokens();
+        const existingAccount = isSource ? stored.source : stored.destination;
+        if (existingAccount) {
+            if (this.isTokenValid(existingAccount.tokens)) {
+                return existingAccount.tokens;
             }
-            return this.refreshToken(existingTokens, isSource);
+            return this.refreshToken(existingAccount.tokens, isSource);
         }
         return this.performOAuthFlow(isSource);
     }
@@ -28,7 +28,6 @@ export class AuthService {
         const state = randomBytes(16).toString('hex');
         const authCode = await this.getAuthorizationCode(state);
         const tokens = await this.exchangeCodeForTokens(authCode);
-        await this.saveTokens(tokens, isSource);
         return tokens;
     }
     async getAuthorizationCode(state) {
@@ -120,7 +119,16 @@ export class AuthService {
                 ...response.data,
                 created_at: Math.floor(Date.now() / 1000),
             };
-            await this.saveTokens(newTokens, isSource);
+            // Update tokens in the stored account
+            const stored = await this.loadTokens();
+            if (isSource && stored.source) {
+                stored.source.tokens = newTokens;
+                await this.saveStoredTokens(stored);
+            }
+            else if (!isSource && stored.destination) {
+                stored.destination.tokens = newTokens;
+                await this.saveStoredTokens(stored);
+            }
             return newTokens;
         }
         catch (error) {
@@ -136,8 +144,15 @@ export class AuthService {
                         data: error.config?.data,
                     }
                 });
-                // If refresh fails, we should clear the tokens and trigger a new OAuth flow
-                await this.saveTokens({}, isSource);
+                // If refresh fails, we should clear the account and trigger a new OAuth flow
+                const stored = await this.loadTokens();
+                if (isSource) {
+                    delete stored.source;
+                }
+                else {
+                    delete stored.destination;
+                }
+                await this.saveStoredTokens(stored);
             }
             throw error;
         }
@@ -151,17 +166,28 @@ export class AuthService {
             return {};
         }
     }
-    async saveTokens(tokens, isSource) {
-        const existingTokens = await this.loadTokens();
-        const updatedTokens = {
-            ...existingTokens,
-            [isSource ? 'source' : 'destination']: tokens,
+    async saveAccount(tokens, accountId, accountName, isSource) {
+        const stored = await this.loadTokens();
+        const account = {
+            id: accountId,
+            name: accountName,
+            tokens: tokens
         };
+        const updatedTokens = {
+            ...stored,
+            [isSource ? 'source' : 'destination']: account
+        };
+        await this.saveStoredTokens(updatedTokens);
+    }
+    async saveStoredTokens(tokens) {
         await fs.mkdir(path.dirname(this.config.tokenStoragePath), { recursive: true });
-        await fs.writeFile(this.config.tokenStoragePath, JSON.stringify(updatedTokens, null, 2));
+        await fs.writeFile(this.config.tokenStoragePath, JSON.stringify(tokens, null, 2));
     }
     isTokenValid(tokens) {
         const expirationTime = (tokens.created_at + tokens.expires_in) * 1000;
         return Date.now() < expirationTime - 300000; // 5 minutes buffer
+    }
+    getStoredAccount(isSource) {
+        return isSource ? this.tokens.source : this.tokens.destination;
     }
 }

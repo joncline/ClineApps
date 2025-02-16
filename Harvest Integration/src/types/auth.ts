@@ -15,7 +15,13 @@ export interface OAuthTokens {
   created_at: number;
 }
 
+export interface StoredAccount {
+  id: string;
+  name: string;
+  tokens: OAuthTokens;
+}
+
 export interface StoredTokens {
-  source?: OAuthTokens;
-  destination?: OAuthTokens;
+  source?: StoredAccount;
+  destination?: StoredAccount;
 }

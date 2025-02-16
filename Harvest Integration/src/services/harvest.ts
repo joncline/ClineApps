@@ -39,9 +39,22 @@ export class HarvestService {
     this.client.interceptors.request.use(async (config) => {
       const tokens = await this.authService.authenticate(this.isSource);
       config.headers['Authorization'] = `Bearer ${tokens.access_token}`;
-      if (this.accountId) {
-        config.headers['Harvest-Account-ID'] = this.accountId;
+      
+      // Ensure we have an account ID for the request
+      if (!this.accountId) {
+        const stored = await this.loadTokens();
+        const account = this.isSource ? stored.source : stored.destination;
+        if (account) {
+          this.accountId = account.id;
+          this.accountName = account.name;
+        }
       }
+
+      if (!this.accountId) {
+        throw new Error('No Harvest account selected. Please initialize the service first.');
+      }
+
+      config.headers['Harvest-Account-ID'] = this.accountId;
       return config;
     });
   }
@@ -50,6 +63,17 @@ export class HarvestService {
     try {
       console.log(`Initializing ${this.isSource ? 'source' : 'destination'} Harvest connection...`);
       
+      // Check for existing account
+      const stored = await this.loadTokens();
+      const existingAccount = this.isSource ? stored.source : stored.destination;
+      
+      if (existingAccount) {
+        this.accountId = existingAccount.id;
+        this.accountName = existingAccount.name;
+        console.log(`Using existing account: ${this.accountName} (${this.accountId})`);
+        return;
+      }
+
       // Start fresh OAuth flow for new setup
       console.log('Starting OAuth authentication...');
       const tokens = await this.authService.performOAuthFlow(this.isSource);
@@ -62,7 +86,6 @@ export class HarvestService {
           'User-Agent': 'Harvest Time Migration Tool',
         }
       });
-      console.log('Accounts Response:', JSON.stringify(accountsResponse.data, null, 2));
 
       if (!accountsResponse.data || !accountsResponse.data.accounts) {
         throw new Error('Failed to retrieve Harvest accounts');
@@ -74,10 +97,6 @@ export class HarvestService {
       }
 
       console.log(`\nSelect ${this.isSource ? 'SOURCE' : 'DESTINATION'} Harvest account:`);
-      accounts.forEach((account: HarvestAccount, index: number) => {
-        console.log(`${index + 1}. ${account.name} (${account.id})`);
-      });
-
       const { action } = await inquirer.prompt([
         {
           type: 'list',
@@ -88,39 +107,21 @@ export class HarvestService {
               name: `Use ${account.name} (${account.id})`,
               value: { type: 'use', account }
             })),
-            { name: '➕ Add New Account', value: { type: 'new' } },
-            ...accounts.map((account: HarvestAccount) => ({
-              name: `❌ Remove ${account.name} (${account.id})`,
-              value: { type: 'remove', account }
-            }))
+            { name: '➕ Add New Account', value: { type: 'new' } }
           ]
         }
       ]);
 
       if (action.type === 'new') {
-        // Clear existing tokens to force new OAuth flow
-        await fs.writeFile(this.config.tokenStoragePath, JSON.stringify({}, null, 2));
-        console.log('Starting new account authentication...');
         // Re-run initialize to start fresh OAuth flow
         return this.initialize();
       }
 
-      if (action.type === 'remove') {
-        // Remove tokens for this account
-        const tokens = await this.loadTokens();
-        if (this.isSource) {
-          delete tokens.source;
-        } else {
-          delete tokens.destination;
-        }
-        await fs.writeFile(this.config.tokenStoragePath, JSON.stringify(tokens, null, 2));
-        console.log(`Removed account: ${action.account.name}`);
-        // Re-run initialize to show updated account list
-        return this.initialize();
-      }
-
+      // Save account information
+      await this.authService.saveAccount(tokens, action.account.id, action.account.name, this.isSource);
       this.accountId = action.account.id;
       this.accountName = action.account.name;
+      
       console.log(`Selected account: ${this.accountName} (${this.accountId})`);
     } catch (error) {
       if (axios.isAxiosError(error)) {
