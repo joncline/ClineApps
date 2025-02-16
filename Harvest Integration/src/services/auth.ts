@@ -93,7 +93,7 @@ export class AuthService {
       data.append('grant_type', 'authorization_code');
       data.append('redirect_uri', this.config.redirectUri);
 
-      const response = await axios.post('https://api.harvestapp.com/v2/oauth2/token', 
+      const response = await axios.post('https://id.getharvest.com/api/v2/oauth2/token', 
         data.toString(),
         {
           headers: {
@@ -134,7 +134,7 @@ export class AuthService {
       data.append('client_secret', this.config.clientSecret);
       data.append('grant_type', 'refresh_token');
 
-      const response = await axios.post('https://api.harvestapp.com/v2/oauth2/token',
+      const response = await axios.post('https://id.getharvest.com/api/v2/oauth2/token',
         data.toString(),
         {
           headers: {
