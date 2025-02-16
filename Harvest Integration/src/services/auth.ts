@@ -33,7 +33,7 @@ export class AuthService {
     return this.performOAuthFlow(isSource);
   }
 
-  private async performOAuthFlow(isSource: boolean): Promise<OAuthTokens> {
+  async performOAuthFlow(isSource: boolean): Promise<OAuthTokens> {
     const state = randomBytes(16).toString('hex');
     const authCode = await this.getAuthorizationCode(state);
     const tokens = await this.exchangeCodeForTokens(authCode);
@@ -69,46 +69,106 @@ export class AuthService {
       });
 
       const authUrl = `https://id.getharvest.com/oauth2/authorize?` +
-        `client_id=${this.config.clientId}&` +
+        `client_id=${encodeURIComponent(this.config.clientId)}&` +
         `response_type=code&` +
-        `scope=${this.config.scope}&` +
-        `state=${state}&` +
-        `redirect_uri=${this.config.redirectUri}`;
+        `scope=${encodeURIComponent(this.config.scope)}&` +
+        `state=${encodeURIComponent(state)}&` +
+        `redirect_uri=${encodeURIComponent(this.config.redirectUri)}`;
+
+      console.log('Opening browser for authentication...');
+      console.log('If the browser does not open automatically, please visit:');
+      console.log(authUrl);
 
       open(authUrl);
     });
   }
 
   private async exchangeCodeForTokens(code: string): Promise<OAuthTokens> {
-    const response = await axios.post('https://id.getharvest.com/api/v2/oauth2/token', {
-      code,
-      client_id: this.config.clientId,
-      client_secret: this.config.clientSecret,
-      grant_type: 'authorization_code',
-      redirect_uri: this.config.redirectUri,
-    });
+    console.log('Exchanging authorization code for tokens...');
+    try {
+      const data = new URLSearchParams();
+      data.append('code', code);
+      data.append('client_id', this.config.clientId);
+      data.append('client_secret', this.config.clientSecret);
+      data.append('grant_type', 'authorization_code');
+      data.append('redirect_uri', this.config.redirectUri);
 
-    return {
-      ...response.data,
-      created_at: Math.floor(Date.now() / 1000),
-    };
+      const response = await axios.post('https://api.harvestapp.com/v2/oauth2/token', 
+        data.toString(),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
+
+      console.log('Token exchange successful');
+      return {
+        ...response.data,
+        created_at: Math.floor(Date.now() / 1000),
+      };
+    } catch (error) {
+      console.error('Token exchange failed');
+      if (axios.isAxiosError(error)) {
+        console.error('Error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            data: error.config?.data,
+          }
+        });
+      }
+      throw error;
+    }
   }
 
   private async refreshToken(tokens: OAuthTokens, isSource: boolean): Promise<OAuthTokens> {
-    const response = await axios.post('https://id.getharvest.com/api/v2/oauth2/token', {
-      refresh_token: tokens.refresh_token,
-      client_id: this.config.clientId,
-      client_secret: this.config.clientSecret,
-      grant_type: 'refresh_token',
-    });
+    console.log('Refreshing access token...');
+    try {
+      const data = new URLSearchParams();
+      data.append('refresh_token', tokens.refresh_token);
+      data.append('client_id', this.config.clientId);
+      data.append('client_secret', this.config.clientSecret);
+      data.append('grant_type', 'refresh_token');
 
-    const newTokens = {
-      ...response.data,
-      created_at: Math.floor(Date.now() / 1000),
-    };
+      const response = await axios.post('https://api.harvestapp.com/v2/oauth2/token',
+        data.toString(),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
 
-    await this.saveTokens(newTokens, isSource);
-    return newTokens;
+      console.log('Token refresh successful');
+      const newTokens = {
+        ...response.data,
+        created_at: Math.floor(Date.now() / 1000),
+      };
+
+      await this.saveTokens(newTokens, isSource);
+      return newTokens;
+    } catch (error) {
+      console.error('Token refresh failed');
+      if (axios.isAxiosError(error)) {
+        console.error('Error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            data: error.config?.data,
+          }
+        });
+        // If refresh fails, we should clear the tokens and trigger a new OAuth flow
+        await this.saveTokens({} as OAuthTokens, isSource);
+      }
+      throw error;
+    }
   }
 
   private async loadTokens(): Promise<StoredTokens> {

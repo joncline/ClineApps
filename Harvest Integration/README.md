@@ -32,20 +32,27 @@ npm run build
 
 You'll need to set up an OAuth2 application in Harvest to use this tool.
 
-### Setting up OAuth2 Application
+### Setting up OAuth2 Application (One-Time Setup)
+
+You only need to register one OAuth application that will work for both source and destination Harvest accounts:
 
 1. Go to https://id.getharvest.com/developers
 2. Click "Create New OAuth2 Application"
 3. Fill in the application details:
    - Name: "Harvest Time Migration Tool" (or any name you prefer)
    - Redirect URL: `http://localhost:3000/oauth/callback`
-   - Multi-Account: Yes
+   - Multi-Account: Yes (Important: This allows access to multiple accounts)
    - Products: Harvest
    - Scope: all
 4. Click "Create Application"
 5. Save the following information:
    - Client ID
    - Client Secret
+
+The same OAuth application (using one client ID/secret) will be used to:
+- Authenticate with your source Harvest account
+- Authenticate with your destination Harvest account
+- Handle token refresh for both accounts
 
 ### Environment Variables
 

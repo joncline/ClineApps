@@ -50,18 +50,15 @@ export class HarvestService {
     try {
       console.log(`Initializing ${this.isSource ? 'source' : 'destination'} Harvest connection...`);
       
-      // First get the user info
-      const userResponse = await this.client.get('/users/me');
-      console.log('User Response:', JSON.stringify(userResponse.data, null, 2));
-
-      if (!userResponse.data) {
-        throw new Error('Invalid response from Harvest API');
-      }
-
+      // Start fresh OAuth flow for new setup
+      console.log('Starting OAuth authentication...');
+      const tokens = await this.authService.performOAuthFlow(this.isSource);
+      
       // Then get the accounts
+      console.log('Fetching Harvest accounts...');
       const accountsResponse = await axios.get('https://id.getharvest.com/api/v2/accounts', {
         headers: {
-          'Authorization': `Bearer ${(await this.authService.authenticate(this.isSource)).access_token}`,
+          'Authorization': `Bearer ${tokens.access_token}`,
           'User-Agent': 'Harvest Time Migration Tool',
         }
       });
