@@ -1,0 +1,39 @@
+{
+  "name": "harvest-integration",
+  "version": "1.0.0",
+  "description": "CLI tool to migrate time entries between Harvest instances",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "harvest-migrate": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "NODE_NO_WARNINGS=1 node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' src/index.ts",
+    "migrate": "NODE_NO_WARNINGS=1 node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' src/index.ts migrate"
+  },
+  "keywords": [
+    "harvest",
+    "time-tracking",
+    "migration"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/express": "^5.0.0",
+    "axios": "^1.7.9",
+    "commander": "^11.1.0",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.4.1",
+    "express": "^4.21.2",
+    "inquirer": "^9.2.14",
+    "oauth-pkce": "^0.0.7",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.11.16",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
