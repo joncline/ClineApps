@@ -1,16 +1,14 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuthService = void 0;
-const express_1 = __importDefault(require("express"));
-const crypto_1 = require("crypto");
-const open_1 = __importDefault(require("open"));
-const promises_1 = __importDefault(require("fs/promises"));
-const path_1 = __importDefault(require("path"));
-const axios_1 = __importDefault(require("axios"));
-class AuthService {
+import express from 'express';
+import { randomBytes } from 'crypto';
+import open from 'open';
+import fs from 'fs/promises';
+import path from 'path';
+import axios from 'axios';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+export class AuthService {
     constructor(config) {
         this.tokens = {};
         this.config = config;
@@ -27,7 +25,7 @@ class AuthService {
         return this.performOAuthFlow(isSource);
     }
     async performOAuthFlow(isSource) {
-        const state = (0, crypto_1.randomBytes)(16).toString('hex');
+        const state = randomBytes(16).toString('hex');
         const authCode = await this.getAuthorizationCode(state);
         const tokens = await this.exchangeCodeForTokens(authCode);
         await this.saveTokens(tokens, isSource);
@@ -35,7 +33,7 @@ class AuthService {
     }
     async getAuthorizationCode(state) {
         return new Promise((resolve, reject) => {
-            const app = (0, express_1.default)();
+            const app = express();
             let server = app.listen(3000);
             app.get('/oauth/callback', async (req, res) => {
                 const { code, state: returnedState, error } = req.query;
@@ -56,44 +54,97 @@ class AuthService {
                 resolve(code);
             });
             const authUrl = `https://id.getharvest.com/oauth2/authorize?` +
-                `client_id=${this.config.clientId}&` +
+                `client_id=${encodeURIComponent(this.config.clientId)}&` +
                 `response_type=code&` +
-                `scope=${this.config.scope}&` +
-                `state=${state}&` +
-                `redirect_uri=${this.config.redirectUri}`;
-            (0, open_1.default)(authUrl);
+                `scope=${encodeURIComponent(this.config.scope)}&` +
+                `state=${encodeURIComponent(state)}&` +
+                `redirect_uri=${encodeURIComponent(this.config.redirectUri)}`;
+            console.log('Opening browser for authentication...');
+            console.log('If the browser does not open automatically, please visit:');
+            console.log(authUrl);
+            open(authUrl);
         });
     }
     async exchangeCodeForTokens(code) {
-        const response = await axios_1.default.post('https://id.getharvest.com/api/v2/oauth2/token', {
-            code,
-            client_id: this.config.clientId,
-            client_secret: this.config.clientSecret,
-            grant_type: 'authorization_code',
-            redirect_uri: this.config.redirectUri,
-        });
-        return {
-            ...response.data,
-            created_at: Math.floor(Date.now() / 1000),
-        };
+        console.log('Exchanging authorization code for tokens...');
+        try {
+            const data = new URLSearchParams();
+            data.append('code', code);
+            data.append('client_id', this.config.clientId);
+            data.append('client_secret', this.config.clientSecret);
+            data.append('grant_type', 'authorization_code');
+            data.append('redirect_uri', this.config.redirectUri);
+            const response = await axios.post('https://id.getharvest.com/api/v2/oauth2/token', data.toString(), {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+            console.log('Token exchange successful');
+            return {
+                ...response.data,
+                created_at: Math.floor(Date.now() / 1000),
+            };
+        }
+        catch (error) {
+            console.error('Token exchange failed');
+            if (axios.isAxiosError(error)) {
+                console.error('Error details:', {
+                    status: error.response?.status,
+                    statusText: error.response?.statusText,
+                    data: error.response?.data,
+                    config: {
+                        url: error.config?.url,
+                        method: error.config?.method,
+                        data: error.config?.data,
+                    }
+                });
+            }
+            throw error;
+        }
     }
     async refreshToken(tokens, isSource) {
-        const response = await axios_1.default.post('https://id.getharvest.com/api/v2/oauth2/token', {
-            refresh_token: tokens.refresh_token,
-            client_id: this.config.clientId,
-            client_secret: this.config.clientSecret,
-            grant_type: 'refresh_token',
-        });
-        const newTokens = {
-            ...response.data,
-            created_at: Math.floor(Date.now() / 1000),
-        };
-        await this.saveTokens(newTokens, isSource);
-        return newTokens;
+        console.log('Refreshing access token...');
+        try {
+            const data = new URLSearchParams();
+            data.append('refresh_token', tokens.refresh_token);
+            data.append('client_id', this.config.clientId);
+            data.append('client_secret', this.config.clientSecret);
+            data.append('grant_type', 'refresh_token');
+            const response = await axios.post('https://id.getharvest.com/api/v2/oauth2/token', data.toString(), {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+            console.log('Token refresh successful');
+            const newTokens = {
+                ...response.data,
+                created_at: Math.floor(Date.now() / 1000),
+            };
+            await this.saveTokens(newTokens, isSource);
+            return newTokens;
+        }
+        catch (error) {
+            console.error('Token refresh failed');
+            if (axios.isAxiosError(error)) {
+                console.error('Error details:', {
+                    status: error.response?.status,
+                    statusText: error.response?.statusText,
+                    data: error.response?.data,
+                    config: {
+                        url: error.config?.url,
+                        method: error.config?.method,
+                        data: error.config?.data,
+                    }
+                });
+                // If refresh fails, we should clear the tokens and trigger a new OAuth flow
+                await this.saveTokens({}, isSource);
+            }
+            throw error;
+        }
     }
     async loadTokens() {
         try {
-            const data = await promises_1.default.readFile(this.config.tokenStoragePath, 'utf-8');
+            const data = await fs.readFile(this.config.tokenStoragePath, 'utf-8');
             return JSON.parse(data);
         }
         catch (error) {
@@ -106,12 +157,11 @@ class AuthService {
             ...existingTokens,
             [isSource ? 'source' : 'destination']: tokens,
         };
-        await promises_1.default.mkdir(path_1.default.dirname(this.config.tokenStoragePath), { recursive: true });
-        await promises_1.default.writeFile(this.config.tokenStoragePath, JSON.stringify(updatedTokens, null, 2));
+        await fs.mkdir(path.dirname(this.config.tokenStoragePath), { recursive: true });
+        await fs.writeFile(this.config.tokenStoragePath, JSON.stringify(updatedTokens, null, 2));
     }
     isTokenValid(tokens) {
         const expirationTime = (tokens.created_at + tokens.expires_in) * 1000;
         return Date.now() < expirationTime - 300000; // 5 minutes buffer
     }
 }
-exports.AuthService = AuthService;

@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { HarvestService } from './services/harvest.js';
 import { TimeEntry } from './types/harvest.js';
 import { OAuthConfig } from './types/auth.js';
+import { MappingService } from './services/mapping.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -103,25 +104,30 @@ program
         }
 
         try {
-      // Get users from source account
-      console.log('\nFetching users from source account...');
-      const users = await sourceHarvest.getUsers();
-      
-      // Let user select which user's entries to migrate
-      const { selectedUser } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'selectedUser',
-          message: 'Select user to migrate time entries for:',
-          choices: users.map(user => ({
-            name: `${user.first_name} ${user.last_name} (${user.email})`,
-            value: user
-          }))
-        }
-      ]);
+          // Get users from source account
+          console.log('\nFetching users from source account...');
+          const users = await sourceHarvest.getUsers();
+          
+          if (users.length === 0) {
+            console.log('No active users found in source account.');
+            continue;
+          }
 
-      // Get date for migration
-      const { date } = await inquirer.prompt([
+          // Let user select which user's entries to migrate
+          const { selectedUser } = await inquirer.prompt([
+            {
+              type: 'list',
+              name: 'selectedUser',
+              message: 'Select user to migrate time entries for:',
+              choices: users.map(user => ({
+                name: `${user.first_name} ${user.last_name} (${user.email})`,
+                value: user
+              }))
+            }
+          ]);
+
+          // Get date for migration
+          const { date } = await inquirer.prompt([
             {
               type: 'input',
               name: 'date',
@@ -131,6 +137,13 @@ program
               },
             },
           ]);
+
+          // Initialize mapping service
+          const mappingService = new MappingService(sourceHarvest, destHarvest);
+
+          // Create initial mapping
+          console.log('\nSetting up entity mappings...');
+          let mapping = await mappingService.createMapping(selectedUser.id);
 
           // Fetch time entries
           console.log('Fetching time entries...');
@@ -164,11 +177,55 @@ program
           // Perform migration
           console.log('\nMigrating time entries...');
           for (const entry of timeEntries) {
-            try {
-              await destHarvest.createTimeEntry(entry);
-              console.log(`✓ Migrated: ${entry.project.name} - ${entry.hours}h`);
-            } catch (error) {
-              console.error(`✗ Failed to migrate entry for ${entry.project.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            let success = false;
+            while (!success) {
+              const projectMapping = mapping.projects.get(entry.project.id);
+              if (!projectMapping) {
+                console.log(`⚠️ No mapping found for project: ${entry.project.name}`);
+                break;
+              }
+
+              const taskId = projectMapping.tasks.get(entry.task.id);
+              if (!taskId) {
+                console.log(`⚠️ No mapping found for task: ${entry.task.name}`);
+                break;
+              }
+
+              const result = await destHarvest.createTimeEntry(entry, {
+                projectId: projectMapping.destinationId,
+                taskId: taskId,
+                userId: mapping.user.destinationId
+              });
+
+              if (result.success) {
+                console.log(`✓ Migrated: ${entry.project.name} - ${entry.hours}h`);
+                success = true;
+              } else {
+                console.error(`✗ Failed to migrate entry: ${result.error}`);
+                
+                const { action } = await inquirer.prompt([
+                  {
+                    type: 'list',
+                    name: 'action',
+                    message: 'How would you like to proceed?',
+                    choices: [
+                      { name: 'Remap entities and retry', value: 'remap' },
+                      { name: 'Skip this entry', value: 'skip' },
+                      { name: 'Quit migration', value: 'quit' }
+                    ]
+                  }
+                ]);
+
+                if (action === 'remap') {
+                  mapping = await mappingService.remapFailedEntry(mapping, entry);
+                } else if (action === 'skip') {
+                  console.log('Skipping entry...');
+                  break;
+                } else {
+                  console.log('Migration cancelled.');
+                  return;
+                }
+              }
             }
           }
 

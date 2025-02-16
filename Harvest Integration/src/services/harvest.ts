@@ -151,7 +151,11 @@ export class HarvestService {
 
   async getUsers(): Promise<any[]> {
     try {
-      const response = await this.client.get('/users');
+      const response = await this.client.get('/users', {
+        params: {
+          is_active: true
+        }
+      });
       return response.data.users;
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -213,22 +217,33 @@ export class HarvestService {
     }
   }
 
-  async createTimeEntry(entry: Omit<TimeEntry, 'id' | 'user'>): Promise<TimeEntry> {
+  async createTimeEntry(
+    entry: Omit<TimeEntry, 'id' | 'user'>,
+    mapping?: { projectId: number; taskId: number; userId: number }
+  ): Promise<{ success: boolean; error?: string }> {
     try {
+      const projectId = mapping ? mapping.projectId : entry.project.id;
+      const taskId = mapping ? mapping.taskId : entry.task.id;
+
       // Validate project and task before creating entry
-      const validation = await this.validateProjectAndTask(entry.project.id, entry.task.id);
+      const validation = await this.validateProjectAndTask(projectId, taskId);
       if (!validation.valid) {
-        throw new Error(validation.message);
+        return { 
+          success: false, 
+          error: validation.message 
+        };
       }
 
       const response = await this.client.post('/time_entries', {
-        project_id: entry.project.id,
-        task_id: entry.task.id,
+        project_id: projectId,
+        task_id: taskId,
+        user_id: mapping?.userId,
         spent_date: entry.spent_date,
         hours: entry.hours,
         notes: entry.notes,
       });
-      return response.data;
+
+      return { success: true };
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.data) {
         // Include the API error details in the message
