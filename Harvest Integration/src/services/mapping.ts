@@ -19,38 +19,35 @@ export class MappingService {
   }
 
   private async mapUser(sourceUserId: number): Promise<UserMapping> {
-    // Get source user details
-    const sourceUsers = await this.sourceHarvest.getUsers();
-    const sourceUser = sourceUsers.find(u => u.id === sourceUserId);
-    if (!sourceUser) {
-      throw new Error(`Source user ${sourceUserId} not found`);
-    }
+    try {
+      // Get destination users for selection
+      const destUsers = await this.destHarvest.getUsers();
+      const activeDestUsers = destUsers.filter(u => u.is_active);
 
-    // Get destination users for selection
-    const destUsers = await this.destHarvest.getUsers();
-    const activeDestUsers = destUsers.filter(u => u.is_active);
-
-    if (activeDestUsers.length === 0) {
-      throw new Error('No active users found in destination account');
-    }
-
-    const { selectedUser } = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'selectedUser',
-        message: `Select destination user to map to ${sourceUser.first_name} ${sourceUser.last_name}:`,
-        choices: activeDestUsers.map(user => ({
-          name: `${user.first_name} ${user.last_name} (${user.email})`,
-          value: user
-        }))
+      if (activeDestUsers.length === 0) {
+        throw new Error('No active users found in destination account');
       }
-    ]);
 
-    return {
-      sourceId: sourceUser.id,
-      destinationId: selectedUser.id,
-      name: `${sourceUser.first_name} ${sourceUser.last_name}`
-    };
+      const { selectedUser } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'selectedUser',
+          message: 'Select destination user to map to:',
+          choices: activeDestUsers.map(user => ({
+            name: `${user.first_name} ${user.last_name} (${user.email})`,
+            value: user
+          }))
+        }
+      ]);
+
+      return {
+        sourceId: sourceUserId,
+        destinationId: selectedUser.id,
+        name: selectedUser.first_name + ' ' + selectedUser.last_name
+      };
+    } catch (error) {
+      throw error instanceof Error ? error : new Error('Failed to map user');
+    }
   }
 
   private async mapProjects(): Promise<Map<number, ProjectMapping>> {

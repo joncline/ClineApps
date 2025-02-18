@@ -4,7 +4,14 @@ import open from 'open';
 import fs from 'fs/promises';
 import path from 'path';
 import axios from 'axios';
-import { OAuthConfig, OAuthTokens, StoredTokens, StoredAccount } from '../types/auth.js';
+import { OAuthConfig, OAuthTokens, StoredTokens, StoredAccount, AuthResult } from '../types/auth.js';
+import inquirer from 'inquirer';
+
+interface HarvestAccount {
+  id: string;
+  name: string;
+  product: string;
+}
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -19,24 +26,59 @@ export class AuthService {
     this.config = config;
   }
 
-  async authenticate(isSource: boolean = true): Promise<OAuthTokens> {
+  async authenticate(isSource: boolean = true): Promise<AuthResult> {
     const stored = await this.loadTokens();
     const existingAccount = isSource ? stored.source : stored.destination;
 
-    if (existingAccount) {
+    if (existingAccount && existingAccount.id) {
       if (this.isTokenValid(existingAccount.tokens)) {
-        return existingAccount.tokens;
+        return { tokens: existingAccount.tokens, accountId: existingAccount.id };
       }
       return this.refreshToken(existingAccount.tokens, isSource);
     }
 
-    return this.performOAuthFlow(isSource);
+    // No existing account, perform new OAuth flow
+    const tokens = await this.performOAuthFlow(isSource);
+    
+    // After OAuth flow, load the newly saved account
+    const updatedStored = await this.loadTokens();
+    const newAccount = isSource ? updatedStored.source : updatedStored.destination;
+    
+    if (!newAccount || !newAccount.id) {
+      throw new Error('Failed to save account information');
+    }
+    
+    return { tokens, accountId: newAccount.id };
   }
 
   async performOAuthFlow(isSource: boolean): Promise<OAuthTokens> {
     const state = randomBytes(16).toString('hex');
     const authCode = await this.getAuthorizationCode(state);
     const tokens = await this.exchangeCodeForTokens(authCode);
+    
+    // Get account info after getting tokens
+    const accountsResponse = await axios.get('https://api.harvestapp.com/api/v2/company', {
+      headers: {
+        'Authorization': `Bearer ${tokens.access_token}`,
+        'User-Agent': 'Harvest Time Migration Tool',
+      }
+    });
+
+    console.log('Company response:', JSON.stringify(accountsResponse.data, null, 2));
+    
+    if (!accountsResponse.data) {
+      throw new Error('Failed to get company information');
+    }
+
+    const company = accountsResponse.data;
+    if (!company.id || !company.name) {
+      throw new Error(`Invalid company data: ${JSON.stringify(company)}`);
+    }
+    
+    const accountId = typeof company.id === 'number' ? company.id.toString() : company.id;
+    
+    // Save the account info
+    await this.saveAccount(tokens, accountId, company.name, isSource);
     return tokens;
   }
 
@@ -101,11 +143,23 @@ export class AuthService {
         }
       );
 
-      console.log('Token exchange successful');
-      return {
-        ...response.data,
-        created_at: Math.floor(Date.now() / 1000),
+      console.log('Token exchange response:', JSON.stringify(response.data, null, 2));
+      
+      if (!response.data || !response.data.access_token) {
+        throw new Error('Invalid token response');
+      }
+
+      const tokens: OAuthTokens = {
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        token_type: response.data.token_type,
+        expires_in: response.data.expires_in,
+        scope: response.data.scope,
+        created_at: Math.floor(Date.now() / 1000)
       };
+
+      console.log('Token exchange successful');
+      return tokens;
     } catch (error) {
       console.error('Token exchange failed');
       if (axios.isAxiosError(error)) {
@@ -124,7 +178,7 @@ export class AuthService {
     }
   }
 
-  private async refreshToken(tokens: OAuthTokens, isSource: boolean): Promise<OAuthTokens> {
+  private async refreshToken(tokens: OAuthTokens, isSource: boolean): Promise<AuthResult> {
     console.log('Refreshing access token...');
     try {
       const data = new URLSearchParams();
@@ -142,14 +196,31 @@ export class AuthService {
         }
       );
 
-      console.log('Token refresh successful');
-      const newTokens = {
-        ...response.data,
-        created_at: Math.floor(Date.now() / 1000),
+      console.log('Token refresh response:', JSON.stringify(response.data, null, 2));
+      
+      if (!response.data || !response.data.access_token) {
+        throw new Error('Invalid token refresh response');
+      }
+
+      const newTokens: OAuthTokens = {
+        access_token: response.data.access_token,
+        refresh_token: response.data.refresh_token,
+        token_type: response.data.token_type,
+        expires_in: response.data.expires_in,
+        scope: response.data.scope,
+        created_at: Math.floor(Date.now() / 1000)
       };
+
+      console.log('Token refresh successful');
 
       // Update tokens in the stored account
       const stored = await this.loadTokens();
+      const account = isSource ? stored.source : stored.destination;
+      
+      if (!account || !account.id) {
+        throw new Error('No account selected. Please initialize the service first.');
+      }
+
       if (isSource && stored.source) {
         stored.source.tokens = newTokens;
         await this.saveStoredTokens(stored);
@@ -158,7 +229,7 @@ export class AuthService {
         await this.saveStoredTokens(stored);
       }
 
-      return newTokens;
+      return { tokens: newTokens, accountId: account.id };
     } catch (error) {
       console.error('Token refresh failed');
       if (axios.isAxiosError(error)) {

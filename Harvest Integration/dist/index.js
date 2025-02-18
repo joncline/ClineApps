@@ -31,8 +31,8 @@ async function loadConfig() {
 async function showMainMenu(sourceHarvest, destHarvest) {
     console.log('\n=== HARVEST TIME MIGRATION TOOL ===');
     const sourceInfo = sourceHarvest?.getAccountInfo();
-    console.log(`Source Account: ${sourceInfo ? `${sourceInfo.name} (${sourceInfo.id})` : 'Not configured'}`);
     const destInfo = destHarvest?.getAccountInfo();
+    console.log(`Source Account: ${sourceInfo ? `${sourceInfo.name} (${sourceInfo.id})` : 'Not configured'}`);
     console.log(`Destination Account: ${destInfo ? `${destInfo.name} (${destInfo.id})` : 'Not configured'}`);
     const { action } = await inquirer.prompt([
         {
@@ -40,9 +40,41 @@ async function showMainMenu(sourceHarvest, destHarvest) {
             name: 'action',
             message: 'What would you like to do?',
             choices: [
-                { name: 'Configure Source Account', value: 'source' },
-                { name: 'Configure Destination Account', value: 'dest' },
-                { name: 'Perform Migration', value: 'migrate' },
+                {
+                    name: sourceInfo
+                        ? `Use Source Account: ${sourceInfo.name} (${sourceInfo.id})`
+                        : 'Configure Source Account',
+                    value: 'source'
+                },
+                {
+                    name: '➕ Add New Source Account',
+                    value: 'new_source'
+                },
+                {
+                    name: '❌ Remove Source Account',
+                    value: 'remove_source',
+                    disabled: !sourceInfo
+                },
+                {
+                    name: destInfo
+                        ? `Use Destination Account: ${destInfo.name} (${destInfo.id})`
+                        : 'Configure Destination Account',
+                    value: 'dest'
+                },
+                {
+                    name: '➕ Add New Destination Account',
+                    value: 'new_dest'
+                },
+                {
+                    name: '❌ Remove Destination Account',
+                    value: 'remove_dest',
+                    disabled: !destInfo
+                },
+                {
+                    name: 'Perform Migration',
+                    value: 'migrate',
+                    disabled: !sourceInfo || !destInfo
+                },
                 { name: 'Exit', value: 'exit' }
             ]
         }
@@ -63,17 +95,39 @@ program
                 console.log('Goodbye!');
                 process.exit(0);
             }
-            if (action === 'source') {
+            if (action === 'source' || action === 'new_source') {
                 console.log('\n=== SOURCE HARVEST SETUP ===');
                 sourceHarvest = new HarvestService(config, true);
+                if (action === 'new_source') {
+                    await sourceHarvest.clearStoredAccount();
+                }
                 await sourceHarvest.initialize();
                 continue;
             }
-            if (action === 'dest') {
+            if (action === 'remove_source') {
+                console.log('\n=== REMOVING SOURCE ACCOUNT ===');
+                if (sourceHarvest) {
+                    await sourceHarvest.clearStoredAccount();
+                    sourceHarvest = null;
+                }
+                continue;
+            }
+            if (action === 'dest' || action === 'new_dest') {
                 console.log('\n=== DESTINATION HARVEST SETUP ===');
                 console.log('Note: You can use the same Harvest account as source, but select a different account if available.');
                 destHarvest = new HarvestService(config, false);
+                if (action === 'new_dest') {
+                    await destHarvest.clearStoredAccount();
+                }
                 await destHarvest.initialize();
+                continue;
+            }
+            if (action === 'remove_dest') {
+                console.log('\n=== REMOVING DESTINATION ACCOUNT ===');
+                if (destHarvest) {
+                    await destHarvest.clearStoredAccount();
+                    destHarvest = null;
+                }
                 continue;
             }
             // Proceed with migration
@@ -112,6 +166,10 @@ program
                         },
                     },
                 ]);
+                // Ensure both services are initialized
+                console.log('\nVerifying Harvest connections...');
+                await sourceHarvest.initialize();
+                await destHarvest.initialize();
                 // Initialize mapping service
                 const mappingService = new MappingService(sourceHarvest, destHarvest);
                 // Create initial mapping

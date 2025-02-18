@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { AuthService } from './auth.js';
-import inquirer from 'inquirer';
 import fs from 'fs/promises';
+import path from 'path';
 export class HarvestService {
     constructor(config, isSource = true) {
         this.accountId = null;
@@ -10,85 +10,47 @@ export class HarvestService {
         this.isSource = isSource;
         this.authService = new AuthService(config);
         this.client = axios.create({
-            baseURL: 'https://api.harvestapp.com/v2',
+            baseURL: 'https://api.harvestapp.com/api/v2',
             headers: {
                 'User-Agent': 'Harvest Time Migration Tool',
             },
         });
         // Add request interceptor to handle token management
         this.client.interceptors.request.use(async (config) => {
-            const tokens = await this.authService.authenticate(this.isSource);
-            config.headers['Authorization'] = `Bearer ${tokens.access_token}`;
-            // Ensure we have an account ID for the request
-            if (!this.accountId) {
-                const stored = await this.loadTokens();
-                const account = this.isSource ? stored.source : stored.destination;
-                if (account) {
-                    this.accountId = account.id;
-                    this.accountName = account.name;
-                }
+            const auth = await this.authService.authenticate(this.isSource);
+            // Update instance account ID if needed
+            if (auth.accountId !== this.accountId) {
+                this.accountId = auth.accountId;
             }
-            if (!this.accountId) {
-                throw new Error('No Harvest account selected. Please initialize the service first.');
-            }
-            config.headers['Harvest-Account-ID'] = this.accountId;
+            // Set headers
+            const headers = {
+                'Authorization': `Bearer ${auth.tokens.access_token}`,
+                'Harvest-Account-ID': auth.accountId,
+                'User-Agent': 'Harvest Time Migration Tool'
+            };
+            // Use type assertion to handle the headers
+            config.headers = { ...config.headers, ...headers };
+            // Log request details
+            console.log('\nPreparing request to Harvest API:');
+            console.log('URL:', config.url);
+            console.log('Headers:', headers);
             return config;
         });
     }
     async initialize() {
         try {
             console.log(`Initializing ${this.isSource ? 'source' : 'destination'} Harvest connection...`);
-            // Check for existing account
-            const stored = await this.loadTokens();
-            const existingAccount = this.isSource ? stored.source : stored.destination;
-            if (existingAccount) {
-                this.accountId = existingAccount.id;
-                this.accountName = existingAccount.name;
-                console.log(`Using existing account: ${this.accountName} (${this.accountId})`);
-                return;
-            }
             // Start fresh OAuth flow for new setup
             console.log('Starting OAuth authentication...');
-            const tokens = await this.authService.performOAuthFlow(this.isSource);
-            // Then get the accounts
-            console.log('Fetching Harvest accounts...');
-            const accountsResponse = await axios.get('https://id.getharvest.com/api/v2/accounts', {
-                headers: {
-                    'Authorization': `Bearer ${tokens.access_token}`,
-                    'User-Agent': 'Harvest Time Migration Tool',
-                }
-            });
-            if (!accountsResponse.data || !accountsResponse.data.accounts) {
-                throw new Error('Failed to retrieve Harvest accounts');
+            const auth = await this.authService.authenticate(this.isSource);
+            // Update instance state with the selected account
+            this.accountId = auth.accountId;
+            const tokens = await this.loadTokens();
+            const account = this.isSource ? tokens.source : tokens.destination;
+            if (account) {
+                this.accountName = account.name;
+                console.log(`Selected account: ${this.accountName} (${this.accountId})`);
             }
-            const accounts = accountsResponse.data.accounts;
-            if (accounts.length === 0) {
-                throw new Error('No Harvest accounts available. Please ensure you have access to at least one account.');
-            }
-            console.log(`\nSelect ${this.isSource ? 'SOURCE' : 'DESTINATION'} Harvest account:`);
-            const { action } = await inquirer.prompt([
-                {
-                    type: 'list',
-                    name: 'action',
-                    message: 'Choose an action:',
-                    choices: [
-                        ...accounts.map((account) => ({
-                            name: `Use ${account.name} (${account.id})`,
-                            value: { type: 'use', account }
-                        })),
-                        { name: '➕ Add New Account', value: { type: 'new' } }
-                    ]
-                }
-            ]);
-            if (action.type === 'new') {
-                // Re-run initialize to start fresh OAuth flow
-                return this.initialize();
-            }
-            // Save account information
-            await this.authService.saveAccount(tokens, action.account.id, action.account.name, this.isSource);
-            this.accountId = action.account.id;
-            this.accountName = action.account.name;
-            console.log(`Selected account: ${this.accountName} (${this.accountId})`);
         }
         catch (error) {
             if (axios.isAxiosError(error)) {
@@ -100,11 +62,28 @@ export class HarvestService {
     async loadTokens() {
         try {
             const data = await fs.readFile(this.config.tokenStoragePath, 'utf-8');
-            return JSON.parse(data);
+            const parsed = JSON.parse(data);
+            return typeof parsed === 'object' && parsed !== null ? parsed : {};
         }
         catch (error) {
             return {};
         }
+    }
+    async saveStoredTokens(tokens) {
+        await fs.mkdir(path.dirname(this.config.tokenStoragePath), { recursive: true });
+        await fs.writeFile(this.config.tokenStoragePath, JSON.stringify(tokens, null, 2));
+    }
+    async clearStoredAccount() {
+        const stored = await this.loadTokens();
+        if (this.isSource) {
+            delete stored.source;
+        }
+        else {
+            delete stored.destination;
+        }
+        await this.saveStoredTokens(stored);
+        this.accountId = null;
+        this.accountName = null;
     }
     getAccountInfo() {
         if (!this.accountId || !this.accountName) {
@@ -122,10 +101,18 @@ export class HarvestService {
                     is_active: true
                 }
             });
+            console.log('\nReceived response from Harvest API:');
+            console.log('Status:', response.status);
+            console.log('Headers:', response.headers);
+            console.log('Data:', JSON.stringify(response.data, null, 2));
             return response.data.users;
         }
         catch (error) {
             if (axios.isAxiosError(error)) {
+                console.error('\nError response from Harvest API:');
+                console.error('Status:', error.response?.status);
+                console.error('Headers:', error.response?.headers);
+                console.error('Data:', error.response?.data);
                 throw new Error(`Failed to fetch users: ${error.message}`);
             }
             throw error;

@@ -25,3 +25,8 @@ export interface StoredTokens {
   source?: StoredAccount;
   destination?: StoredAccount;
 }
+
+export interface AuthResult {
+  tokens: OAuthTokens;
+  accountId: string;
+}
