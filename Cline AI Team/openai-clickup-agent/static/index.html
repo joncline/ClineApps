@@ -81,7 +81,12 @@
 </head>
 <body>
     <h1>ClickUp Assistant Chat</h1>
-    <div id="chat-container">
+    <div id="auth-container" style="text-align: center; margin-bottom: 20px; display: none;">
+        <p>Please connect your ClickUp account to continue</p>
+        <button onclick="startAuth()" style="font-size: 16px; padding: 12px 24px;">Connect ClickUp</button>
+    </div>
+
+    <div id="chat-container" style="display: none;">
         <div id="messages">
             <div class="message assistant-message">
                 Hello! I'm your ClickUp assistant. I can help you create and manage tasks. Try saying something like "create a task to update the documentation" or "list my spaces".
@@ -96,6 +101,33 @@
     <script>
         const messagesContainer = document.getElementById('messages');
         const userInput = document.getElementById('user-input');
+        const authContainer = document.getElementById('auth-container');
+        const chatContainer = document.getElementById('chat-container');
+
+        // Check authentication status on page load
+        checkAuthStatus();
+
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/auth/status');
+                const data = await response.json();
+                
+                if (data.authenticated) {
+                    authContainer.style.display = 'none';
+                    chatContainer.style.display = 'block';
+                } else {
+                    authContainer.style.display = 'block';
+                    chatContainer.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error checking auth status:', error);
+                addMessage('❌ Error checking authentication status', 'error');
+            }
+        }
+
+        function startAuth() {
+            window.location.href = '/auth';
+        }
 
         function addMessage(content, type = 'assistant') {
             const messageDiv = document.createElement('div');
@@ -154,6 +186,11 @@
                 if (data.error) {
                     // Show error message
                     addMessage(`❌ ${data.error}`, 'error');
+                    if (response.status === 401) {
+                        // If unauthorized, show auth container
+                        authContainer.style.display = 'block';
+                        chatContainer.style.display = 'none';
+                    }
                 }
 
                 // Add assistant response
